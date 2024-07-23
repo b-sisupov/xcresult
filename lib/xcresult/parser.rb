@@ -16,6 +16,14 @@ module XCResult
       @actions_invocation_record = XCResult::ActionsInvocationRecord.new(@result_bundle_json)
     end
 
+    def patch_xcresulttool(xcresulttool_cmd)
+      patched_cmd = xcresulttool_cmd.dup
+      # Since Xcode 16 beta 3 (xcrun version 70) xcresulttool get/export object methods are deprecated.
+      # Adding --legacy argument to workaround this issue.
+      patched_cmd << ' --legacy' if `xcrun --version`.gsub('xcrun version ', '').to_f >= 70.0
+      patched_cmd
+    end
+
     def action_test_plan_summaries
       return @action_test_plan_summaries if @action_test_plan_summaries
 
@@ -28,7 +36,7 @@ module XCResult
       # Maps ids into ActionTestPlanRunSummaries by executing xcresulttool to get JSON
       # containing specific information for each test summary
       @action_test_plan_summaries = ids.map do |id|
-        raw = execute_cmd("xcrun xcresulttool get --format json --path #{path} --id #{id}")
+        raw = execute_cmd(patch_xcresulttool("xcrun xcresulttool get --format json --path #{path} --id #{id}"))
         json = JSON.parse(raw)
         XCResult::ActionTestPlanRunSummaries.new(json)
       end
@@ -48,7 +56,7 @@ module XCResult
       # Exports all xccovreport files from the report references
       ids.each_with_index.map do |id, i|
         output_path = File.join(destination, "action_#{i}.xccovreport")
-        cmd = "xcrun xcresulttool export --path #{path} --id '#{id}' --output-path #{output_path} --type file"
+        cmd = patch_xcresulttool("xcrun xcresulttool export --path #{path} --id '#{id}' --output-path #{output_path} --type file")
         execute_cmd(cmd)
 
         output_path
@@ -67,7 +75,7 @@ module XCResult
       # Exports all xcovarchive directories from the archive references
       ids.each_with_index.map do |id, i|
         output_path = File.join(destination, "action_#{i}.xccovarchive")
-        cmd = "xcrun xcresulttool export --path #{path} --id '#{id}' --output-path #{output_path} --type directory"
+        cmd = patch_xcresulttool("xcrun xcresulttool export --path #{path} --id '#{id}' --output-path #{output_path} --type directory")
         execute_cmd(cmd)
 
         output_path
@@ -77,7 +85,7 @@ module XCResult
     private
 
     def get_result_bundle_json(id: nil)
-      cmd = "xcrun xcresulttool get --format json --path #{path}"
+      cmd = patch_xcresulttool("xcrun xcresulttool get --format json --path #{path}")
       cmd += " --id #{id}" if id
       execute_cmd(cmd)
     end
